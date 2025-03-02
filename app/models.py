@@ -51,5 +51,6 @@ class Media(Base):
     post_id = Column(String, ForeignKey("posts.id"), nullable=True)
     file_path = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+    created_by = Column(String, nullable=False)
 
     post = relationship("Post", back_populates="media")

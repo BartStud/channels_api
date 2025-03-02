@@ -1,6 +1,14 @@
 import io
 import uuid
-from fastapi import HTTPException, Depends, UploadFile, File, APIRouter
+from fastapi import (
+    HTTPException,
+    Depends,
+    Response,
+    UploadFile,
+    File,
+    APIRouter,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import or_
@@ -287,14 +295,9 @@ async def list_comments(post_id: str, db: AsyncSession = Depends(get_db)):
     return comments
 
 
-# ----------------------------
-# Media endpoints
-# ----------------------------
-
-
 @router.post("/posts/{post_id}/media", response_model=MediaOut)
 async def upload_media(
-    post_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)
+    post_id: str, file: UploadFile = File(...), user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(Post).where(Post.id == post_id))
     post = result.scalars().first()
@@ -315,8 +318,33 @@ async def upload_media(
     except Exception as e:
         raise HTTPException(status_code=500, detail="Media upload failed")
 
-    new_media = Media(post_id=post_id, file_path=file_name)
+    new_media = Media(post_id=post_id, file_path=file_name, created_by=user["sub"])
     db.add(new_media)
     await db.commit()
     await db.refresh(new_media)
     return new_media
+
+
+@router.delete(
+    "/posts/{post_id}/media/{media_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_media(post_id: str, media_id: int, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Media).where(Media.id == media_id, Media.post_id == post_id, Media.created_by = user["sub"])
+    )
+    media = result.scalars().first()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    minio_client = get_minio_client()
+    try:
+        minio_client.remove_object(MINIO_BUCKET, media.file_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Media deletion failed in MinIO: {e}"
+        )
+
+    await db.delete(media)
+    await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
