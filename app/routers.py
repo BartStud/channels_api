@@ -297,7 +297,10 @@ async def list_comments(post_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/posts/{post_id}/media", response_model=MediaOut)
 async def upload_media(
-    post_id: str, file: UploadFile = File(...), user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    post_id: str,
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Post).where(Post.id == post_id))
     post = result.scalars().first()
@@ -328,9 +331,18 @@ async def upload_media(
 @router.delete(
     "/posts/{post_id}/media/{media_id}", status_code=status.HTTP_204_NO_CONTENT
 )
-async def delete_media(post_id: str, media_id: int, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def delete_media(
+    post_id: str,
+    media_id: int,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
-        select(Media).where(Media.id == media_id, Media.post_id == post_id, Media.created_by = user["sub"])
+        select(Media).where(
+            Media.id == media_id,
+            Media.post_id == post_id,
+            Media.created_by == user["sub"],
+        )
     )
     media = result.scalars().first()
     if not media:
