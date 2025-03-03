@@ -16,6 +16,9 @@ class Channel(Base):
     updated_at = Column(DateTime, onupdate=func.now())
 
     posts = relationship("Post", back_populates="channel", cascade="all, delete-orphan")
+    events = relationship(
+        "Event", back_populates="channel", cascade="all, delete-orphan"
+    )
 
 
 class Post(Base):
@@ -54,3 +57,19 @@ class Media(Base):
     created_by = Column(String, nullable=False)
 
     post = relationship("Post", back_populates="media")
+
+
+class Event(Base):
+    __tablename__ = "events"
+    id = Column(String, primary_key=True, index=True, default=func.uuid_generate_v4())
+    channel_id = Column(String, ForeignKey("channels.id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    location = Column(String, nullable=True)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+    created_by = Column(String, nullable=False)
+
+    channel = relationship("Channel", back_populates="events")

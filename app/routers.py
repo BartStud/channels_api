@@ -1,3 +1,4 @@
+from datetime import datetime
 import io
 import uuid
 from fastapi import (
@@ -15,7 +16,7 @@ from sqlalchemy import or_
 from typing import List, Optional
 from pydantic import BaseModel
 
-from app.models import Channel, Post, Comment, Media
+from app.models import Channel, Event, Post, Comment, Media
 from app.db import get_db
 from app.keycloak_api import keycloak_admin
 from app.minio import get_minio_client, MINIO_BUCKET
@@ -360,3 +361,124 @@ async def delete_media(
     await db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+class EventCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    start_time: datetime
+    end_time: datetime
+    location: Optional[str] = None
+
+
+class EventUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    location: Optional[str] = None
+
+
+class EventOut(BaseModel):
+    id: str
+    channel_id: str
+    title: str
+    description: Optional[str]
+    start_time: datetime
+    end_time: datetime
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+    created_by: str
+
+    class Config:
+        orm_mode = True
+
+
+@router.post("/channels/{channel_id}/events", response_model=EventOut)
+async def create_event(
+    channel_id: str,
+    event_in: EventCreate,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalars().first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    new_event = Event(
+        channel_id=channel_id,
+        title=event_in.title,
+        description=event_in.description,
+        start_time=event_in.start_time,
+        end_time=event_in.end_time,
+        created_by=user["sub"],
+    )
+    db.add(new_event)
+    await db.commit()
+    await db.refresh(new_event)
+    return new_event
+
+
+@router.get("/channels/{channel_id}/events", response_model=List[EventOut])
+async def list_events(
+    channel_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Event).where(Event.channel_id == channel_id))
+    events = result.scalars().all()
+    return events
+
+
+@router.get("/events/{event_id}", response_model=EventOut)
+async def get_event(
+    event_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Event).where(Event.id == event_id))
+    event = result.scalars().first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event
+
+
+@router.put("/events/{event_id}", response_model=EventOut)
+async def update_event(
+    event_id: str,
+    event_update: EventUpdate,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Event).where(Event.id == event_id, Event.created_by == user["sub"])
+    )
+    event = result.scalars().first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if event_update.title is not None:
+        event.title = event_update.title
+    if event_update.description is not None:
+        event.description = event_update.description
+    if event_update.start_time is not None:
+        event.start_time = event_update.start_time
+    if event_update.end_time is not None:
+        event.end_time = event_update.end_time
+
+    db.add(event)
+    await db.commit()
+    await db.refresh(event)
+    return event
+
+
+@router.delete("/events/{event_id}", status_code=204)
+async def delete_event(
+    event_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Event).where(Event.id == event_id, created_by=user["sub"])
+    )
+    event = result.scalars().first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    await db.delete(event)
+    await db.commit()
+    return
