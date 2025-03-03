@@ -16,6 +16,7 @@ from sqlalchemy import or_
 from typing import List, Optional
 from pydantic import BaseModel
 
+from app.ics import generate_ics
 from app.models import Channel, Event, Post, Comment, Media
 from app.db import get_db
 from app.keycloak_api import keycloak_admin
@@ -482,3 +483,25 @@ async def delete_event(
     await db.delete(event)
     await db.commit()
     return
+
+
+@router.get("/events/{event_id}/download_ics")
+async def download_event_ics(
+    event_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Event).where(Event.id == event_id))
+    event = result.scalars().first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    event_title = event.title
+    event_description = event.description
+    event_location = event.location
+    start_time = event.start_time
+    end_time = event.end_time
+
+    ics_content = generate_ics(
+        event_title, event_description, event_location, start_time, end_time
+    )
+    headers = {"Content-Disposition": "attachment; filename=event.ics"}
+    return Response(content=ics_content, media_type="text/calendar", headers=headers)
