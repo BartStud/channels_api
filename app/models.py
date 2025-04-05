@@ -35,6 +35,10 @@ class Post(Base):
     comments = relationship(
         "Comment", back_populates="post", cascade="all, delete-orphan"
     )
+    media = relationship(
+        "Media", back_populates="post", cascade="all, delete-orphan"
+    )
+
 
 
 class Comment(Base):

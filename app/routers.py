@@ -44,8 +44,8 @@ class ChannelOut(BaseModel):
     description: Optional[str]
     client_id: str
     behaviorist_id: str
-    created_at: Optional[str]
-    updated_at: Optional[str]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 
     class Config:
         orm_mode = True
@@ -119,6 +119,7 @@ async def create_channel(
         client_id = f"INVITED:{channel_in.client_email}"
 
     new_channel = Channel(
+        id=str(uuid.uuid4()),
         name=channel_in.name,
         description=channel_in.description,
         client_id=client_id,
